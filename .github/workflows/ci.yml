@@ -1,0 +1,113 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  PYTHON_VERSION: '3.12'
+  NODE_VERSION: '18'
+
+jobs:
+  integration-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Build and start services
+      run: |
+        cp .env.example .env
+        make build
+        
+    - name: Wait for services
+      run: |
+        for i in {1..10}; do
+          if curl -f http://0.0.0.0:8080/api/v1/auth/redoc/; then
+            echo "Services are ready!"
+            break
+          fi
+          echo "Waiting... ($i/10)"
+          sleep 5
+        done
+    
+    - name: Create superuser
+      run: make superuser-auto
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+    
+    - name: Install Newman
+      run: cd api-tests && yarn install
+    
+    - name: Run Integration Tests
+      run: cd api-tests && yarn test:integration
+    
+    - name: Upload Integration Test Results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: integration-test-results
+        path: api-tests/newman-reports/
+
+  performance-tests:
+    runs-on: ubuntu-latest
+    needs: integration-tests
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Build and start services
+      run: |
+        cp .env.example .env
+        make build
+        
+    - name: Wait for services
+      run: |
+        for i in {1..24}; do
+          if curl -f http://0.0.0.0:8080/api/v1/auth/redoc/; then
+            echo "Services are ready!"
+            break
+          fi
+          echo "Waiting... ($i/24)"
+          sleep 5
+        done
+    
+    - name: Create superuser
+      run: make superuser-auto
+    
+    # - name: Install Locust
+    #   run: make install-locust
+    
+    # - name: Create performance test reports directory
+    #   run: mkdir -p performance-tests/reports
+    
+    # - name: Run Performance Tests
+    #   run: make perf-test-headless
+    #   env:
+    #     BASE_URL: http://0.0.0.0:8080
+    #     ADMIN_EMAIL: admin@example.com
+    #     ADMIN_PASSWORD: adminpass123
+    
+    # - name: Upload Performance Test Results
+    #   uses: actions/upload-artifact@v3
+    #   if: always()
+    #   with:
+    #     name: performance-test-results
+    #     path: performance-tests/reports/

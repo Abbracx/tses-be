@@ -1,0 +1,63 @@
+name: Integration Tests Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  integration-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+    
+    - name: Cache Yarn dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/yarn
+        key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+    
+    - name: Build and start services
+      run: |
+        cp .env.example .env
+        make build
+        
+    - name: Wait for services
+      run: |
+        for i in {1..24}; do
+          if curl -f http://localhost:8080/api/v1/auth/redoc/ 2>/dev/null; then
+            echo "Services are ready!"
+            break
+          fi
+          echo "Waiting... ($i/24)"
+          sleep 5
+        done
+    
+    - name: Create superuser
+      run: make superuser-auto
+    
+    - name: Install Newman
+      run: cd api-tests && yarn install
+    
+    - name: Run Integration Tests
+      run: cd api-tests && yarn test:integration
+    
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: integration-test-results
+        path: api-tests/newman-reports/
