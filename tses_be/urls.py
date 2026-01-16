@@ -27,7 +27,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/v1/auth/", include("apps.users.urls.otp", namespace="usersotp")),
     path("api/v1/auth/", include("apps.users.urls.base", namespace="usersapi")),
-    path("api/v1/audits/", include("apps.audits.urls", namespace="loans")),
+    path("api/v1/audit/", include("apps.audits.urls", namespace="tsess")),
     path(
         "api/v1/auth/swagger/",
         schema_view.with_ui("swagger", cache_timeout=0),

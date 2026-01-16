@@ -259,7 +259,7 @@ LOGGING = {
         },
     },
     "loggers": {
-        "apps.loans": {
+        "apps.tsess": {
             "handlers": ["console", "file"],
             "level": "INFO",
             "propagate": False,

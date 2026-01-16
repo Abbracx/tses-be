@@ -24,7 +24,7 @@ EMAIL_PORT="2525"
 
 DEFAULT_FROM_EMAIL = "tankoraphael6@gmail.com"
 DOMAIN = env("DOMAIN")
-SITE_NAME = "Loan BE"
+SITE_NAME = "TSES BE"
 
 # Disable cache for tests
 CACHES = {
