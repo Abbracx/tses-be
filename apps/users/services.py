@@ -57,13 +57,13 @@ class OTPService:
         """Increment rate limit counters atomically"""
         email_key = f"otp_request_email:{email}"
         ip_key = f"otp_request_ip:{ip_address}"
-        
+
         if cache.get(email_key) is None:
             cache.set(email_key, 1, timeout=OTPService.EMAIL_RATE_WINDOW)
             cache.set(email_key + ':timeout', int(now().timestamp()) + OTPService.EMAIL_RATE_WINDOW)
         else:
             cache.incr(email_key)
-        
+
         if cache.get(ip_key) is None:
             cache.set(ip_key, 1, timeout=OTPService.IP_RATE_WINDOW)
             cache.set(ip_key + ':timeout', int(now().timestamp()) + OTPService.IP_RATE_WINDOW)
@@ -133,15 +133,14 @@ class OTPService:
 
     @staticmethod
     def _handle_failed_attempt(email, ip_address, user_agent):
-        
         failed_key = f"otp_failed:{email}"
         failed_count = cache.get(failed_key, 0) + 1
-        
+
         if failed_count >= OTPService.MAX_FAILED_ATTEMPTS:
             cache.set(f"otp_lockout:{email}", True, timeout=OTPService.LOCKOUT_DURATION)
             cache.delete(failed_key)
             cache.delete(f"otp:{email}")
-            
+
             logger.error(f"🔒 Account locked after {OTPService.MAX_FAILED_ATTEMPTS} failed attempts: {email}")
             write_audit_log.delay('OTP_LOCKED', email, ip_address, {
                 'user_agent': user_agent,
@@ -151,12 +150,19 @@ class OTPService:
                 'error': f'Too many failed attempts. Account locked for {OTPService.LOCKOUT_DURATION // 60} minutes.',
                 'unlock_eta': OTPService.LOCKOUT_DURATION
             }, 423
-        
+
+        # Store the failed attempt count and set the timeout
         if cache.get(failed_key) is None:
             cache.set(failed_key, failed_count, timeout=OTPService.LOCKOUT_DURATION)
         else:
-            cache.set(failed_key, failed_count, timeout=cache.ttl(failed_key))
-        
+            # Calculate the remaining TTL manually
+            timeout_at = cache.get(failed_key + ':timeout')
+            if timeout_at:
+                remaining_ttl = max(0, timeout_at - int(now().timestamp()))
+            else:
+                remaining_ttl = OTPService.LOCKOUT_DURATION
+            cache.set(failed_key, failed_count, timeout=remaining_ttl)
+
         logger.warning(f"❌ Invalid OTP attempt {failed_count}/{OTPService.MAX_FAILED_ATTEMPTS} for: {email}")
         write_audit_log.delay('OTP_FAILED', email, ip_address, {
             'user_agent': user_agent,
@@ -166,7 +172,7 @@ class OTPService:
             'error': 'Invalid OTP',
             'attempts_remaining': OTPService.MAX_FAILED_ATTEMPTS - failed_count
         }, 400
-
+    
     @staticmethod
     def _handle_successful_verification(email, ip_address, user_agent):
        
