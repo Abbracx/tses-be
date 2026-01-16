@@ -29,7 +29,7 @@ EMAIL_HOST_PASSWORD= env("EMAIL_HOST_PASSWORD", default="Password123")
 
 DEFAULT_FROM_EMAIL = env(
     "DEFAULT_FROM_EMAIL",
-    default="Loan BE <no-reply@localhost>",
+    default="tses BE <no-reply@localhost>",
 )
 DOMAIN = env("DOMAIN")
-SITE_NAME = "Loan BE"
+SITE_NAME = "tses BE"

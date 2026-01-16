@@ -1,0 +1,12 @@
+[tool.black]
+extend-exclude = '''
+/(
+    | env
+)/
+'''
+
+[tool.isort]
+skip = ["venv"]
+
+[tool.poetry.dependencies]
+python = "^3.12.10"
