@@ -14,6 +14,9 @@ from apps.users.paginations import UserPagination
 from apps.users.serializers import OTPRequestSerializer, OTPVerifySerializer
 from apps.users.services import OTPService
 
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+
 logger = logging.getLogger(__name__)
 
 
@@ -21,18 +24,42 @@ class OTPRequestView(APIView):
 
     permission_classes = [permissions.AllowAny]
     serializer_class = OTPRequestSerializer
-    
+
+    @swagger_auto_schema(
+        request_body=OTPRequestSerializer,
+        operation_description="Request an OTP for the given email address.",
+        responses={
+            202: openapi.Response(
+                description="OTP sent successfully",
+                examples={
+                    "application/json": {
+                        "message": "OTP sent successfully",
+                        "expires_in": 300
+                    }
+                },
+            ),
+            429: openapi.Response(
+                description="Too Many Requests",
+                examples={
+                    "application/json": {
+                        "error": "Too many OTP requests. Please try again later.",
+                        "retry_after": 597
+                    }
+                },
+            ),
+        },
+    )
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
+
         email = serializer.validated_data['email']
         ip_address = get_client_ip(request)
         user_agent = get_user_agent(request)
-        
+
         success, response_data = OTPService.request_otp(email, ip_address, user_agent)
         status_code = status.HTTP_202_ACCEPTED if success else status.HTTP_429_TOO_MANY_REQUESTS
-        
+
         return Response(response_data, status=status_code)
 
 
@@ -40,18 +67,56 @@ class OTPVerifyView(APIView):
 
     permission_classes = [permissions.AllowAny]
     serializer_class = OTPVerifySerializer
-    
+
+    @swagger_auto_schema(
+        request_body=OTPVerifySerializer,
+        operation_description="Verify the OTP for the given email address.",
+        responses={
+            200: openapi.Response(
+                description="OTP verified successfully",
+                examples={
+                    "application/json": {
+                        "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                        "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                        "user": {
+                            "id": "147fe47f-0fca-4a10-a551-7525e9228787",
+                            "email": "tankoraphael@gmail.com",
+                            "username": "abbracx",
+                            "is_verified": True
+                        }
+                    }
+                },
+            ),
+            400: openapi.Response(
+                description="Bad Request",
+                examples={
+                    "application/json": {
+                        "error": "Invalid OTP",
+                        "attempts_remaining": 4
+                    }
+                },
+            ),
+            400: openapi.Response(
+                description="Bad Request",
+                examples={
+                    "application/json": {
+                        "error": "OTP not found or expired. Please request a new one."
+                    }
+                },
+            ),
+        },
+    )
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
+
         email = serializer.validated_data['email']
         otp = serializer.validated_data['otp']
         ip_address = get_client_ip(request)
         user_agent = get_user_agent(request)
-        
+
         success, response_data, status_code = OTPService.verify_otp(email, otp, ip_address, user_agent)
-        
+
         return Response(response_data, status=status_code)
 
 
