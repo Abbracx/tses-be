@@ -20,6 +20,5 @@ class TestAuditService:
         }
         
         filtered_logs = AuditService.filter_audit_logs(queryset, query_params)
-        breakpoint()
         assert filtered_logs.count() == 1
         assert filtered_logs.first().action == "LOGIN"
