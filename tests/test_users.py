@@ -3,6 +3,7 @@ from django.urls import reverse
 from rest_framework import status
 from unittest.mock import patch
 from tests.factories import UserFactory
+from django.core.cache import cache
 
 @pytest.mark.django_db
 class TestUserManagement:
@@ -31,6 +32,9 @@ class TestUserManagement:
         user = UserFactory(email='testuser@example.com')
         url = reverse('usersotp:otp-request')
         data = {'email': user.email}
+       
+        cache.clear()  
+    
         response = api_client.post(url, data)
         assert response.status_code == status.HTTP_202_ACCEPTED
         assert 'message' in response.data

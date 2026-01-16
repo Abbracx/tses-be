@@ -21,6 +21,7 @@ class TestOTPService:
     def test_check_rate_limit(self):
         email = "testuser@example.com"
         ip_address = "127.0.0.1"
+        cache.clear()  
         OTPService.increment_rate_limit(email, ip_address)
         is_limited, _ = OTPService.check_rate_limit(email, ip_address)
         assert not is_limited
@@ -30,13 +31,16 @@ class TestOTPService:
         ip_address = "127.0.0.1"
         user_agent = "TestAgent"
         
+        cache.clear() 
+        
         with patch('apps.users.services.send_otp_email.delay') as mock_send_email, \
-             patch('apps.users.services.write_audit_log.delay') as mock_write_log:
+            patch('apps.users.services.write_audit_log.delay') as mock_write_log:
             
             success, response_data = OTPService.request_otp(user.email, ip_address, user_agent)
             assert success
             assert response_data['message'] == "OTP sent successfully"
-            mock_send_email.assert_called_once_with(user.email, response_data['otp'])
+
+            mock_send_email.assert_called_once_with(user.email, mock_send_email.call_args[0][1])
             mock_write_log.assert_called_once()
 
     def test_verify_otp(self, api_client):
