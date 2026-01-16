@@ -1,0 +1,16 @@
+{
+  "name": "tses-be-api-tests",
+  "version": "1.0.0",
+  "description": "API tests for tses BE",
+  "scripts": {
+    "test:integration": "newman run collections/tses-be-integration.postman_collection.json -e environments/ci.postman_environment.json --reporters cli,html,junit --reporter-html-export newman-reports/integration-report.html --reporter-junit-export newman-reports/integration-junit.xml",
+    "test:otp": "newman run collections/tses-be-integration.postman_collection.json -e environments/ci.postman_environment.json --folder 'OTP Authentication' --reporters cli",
+    "test:audit": "newman run collections/tses-be-integration.postman_collection.json -e environments/ci.postman_environment.json --folder 'Audit Logs' --reporters cli"
+  },
+  "devDependencies": {
+    "newman": "^6.0.0",
+    "newman-reporter-html": "^1.0.5"
+  },
+  "author": "Raphael Tanko",
+  "license": "MIT"
+}

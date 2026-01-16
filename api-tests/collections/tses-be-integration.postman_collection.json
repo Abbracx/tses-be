@@ -1,0 +1,421 @@
+{
+    "info": {
+      "name": "TSES Backend - OTP & Audit Integration Tests",
+      "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+      {
+        "name": "OTP Authentication",
+        "item": [
+          {
+            "name": "OTP Request - Happy Path",
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "pm.test('Status is 202 Accepted', () => {",
+                    "    pm.response.to.have.status(202);",
+                    "});",
+                    "",
+                    "pm.test('Response has success message', () => {",
+                    "    const json = pm.response.json();",
+                    "    pm.expect(json.message).to.eql('OTP sent successfully');",
+                    "    pm.expect(json.expires_in).to.eql(300);",
+                    "});"
+                  ]
+                }
+              }
+            ],
+            "request": {
+              "method": "POST",
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": {
+                "mode": "raw",
+                "raw": "{\"email\": \"{{test_email}}\"}"
+              },
+              "url": {
+                "raw": "{{base_url}}/api/v1/auth/otp/request/",
+                "host": ["{{base_url}}"],
+                "path": ["api", "v1", "auth", "otp", "request", ""]
+              }
+            }
+          },
+          {
+            "name": "OTP Request - Rate Limit Email",
+            "event": [
+              {
+                "listen": "prerequest",
+                "script": {
+                  "exec": [
+                    "// Make 3 requests first",
+                    "for(let i = 0; i < 3; i++) {",
+                    "    pm.sendRequest({",
+                    "        url: pm.environment.get('base_url') + '/api/v1/auth/otp/request/',",
+                    "        method: 'POST',",
+                    "        header: {'Content-Type': 'application/json'},",
+                    "        body: {mode: 'raw', raw: JSON.stringify({email: pm.environment.get('test_email')})}",
+                    "    });",
+                    "}"
+                  ]
+                }
+              },
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "pm.test('Status is 429 Too Many Requests', () => {",
+                    "    pm.response.to.have.status(429);",
+                    "});",
+                    "",
+                    "pm.test('Response has rate limit error', () => {",
+                    "    const json = pm.response.json();",
+                    "    pm.expect(json.error).to.include('Too many OTP requests');",
+                    "    pm.expect(json.retry_after).to.be.a('number');",
+                    "});"
+                  ]
+                }
+              }
+            ],
+            "request": {
+              "method": "POST",
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": {
+                "mode": "raw",
+                "raw": "{\"email\": \"{{test_email}}\"}"
+              },
+              "url": {
+                "raw": "{{base_url}}/api/v1/auth/otp/request/",
+                "host": ["{{base_url}}"],
+                "path": ["api", "v1", "auth", "otp", "request", ""]
+              }
+            }
+          },
+          {
+            "name": "OTP Verify - Wrong OTP",
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "pm.test('Status is 400 Bad Request', () => {",
+                    "    pm.response.to.have.status(400);",
+                    "});",
+                    "",
+                    "pm.test('Response shows failed attempt counter', () => {",
+                    "    const json = pm.response.json();",
+                    "    pm.expect(json.error).to.eql('Invalid OTP');",
+                    "    pm.expect(json.attempts_remaining).to.be.a('number');",
+                    "    pm.expect(json.attempts_remaining).to.be.below(6);",
+                    "});"
+                  ]
+                }
+              }
+            ],
+            "request": {
+              "method": "POST",
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": {
+                "mode": "raw",
+                "raw": "{\"email\": \"{{test_email}}\", \"otp\": \"000000\"}"
+              },
+              "url": {
+                "raw": "{{base_url}}/api/v1/auth/otp/verify/",
+                "host": ["{{base_url}}"],
+                "path": ["api", "v1", "auth", "otp", "verify", ""]
+              }
+            }
+          },
+          {
+            "name": "OTP Verify - Trigger Lockout",
+            "event": [
+              {
+                "listen": "prerequest",
+                "script": {
+                  "exec": [
+                    "// Make 4 wrong attempts first",
+                    "for(let i = 0; i < 4; i++) {",
+                    "    pm.sendRequest({",
+                    "        url: pm.environment.get('base_url') + '/api/v1/auth/otp/verify/',",
+                    "        method: 'POST',",
+                    "        header: {'Content-Type': 'application/json'},",
+                    "        body: {mode: 'raw', raw: JSON.stringify({email: pm.environment.get('lockout_email'), otp: '000000'})}",
+                    "    });",
+                    "}"
+                  ]
+                }
+              },
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "pm.test('Status is 423 Locked', () => {",
+                    "    pm.response.to.have.status(423);",
+                    "});",
+                    "",
+                    "pm.test('Response has lockout details', () => {",
+                    "    const json = pm.response.json();",
+                    "    pm.expect(json.error).to.include('locked');",
+                    "    pm.expect(json.unlock_eta).to.be.a('number');",
+                    "    pm.expect(json.unlock_eta).to.be.above(0);",
+                    "});"
+                  ]
+                }
+              }
+            ],
+            "request": {
+              "method": "POST",
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": {
+                "mode": "raw",
+                "raw": "{\"email\": \"{{lockout_email}}\", \"otp\": \"000000\"}"
+              },
+              "url": {
+                "raw": "{{base_url}}/api/v1/auth/otp/verify/",
+                "host": ["{{base_url}}"],
+                "path": ["api", "v1", "auth", "otp", "verify", ""]
+              }
+            }
+          },
+          {
+            "name": "OTP Request - For Success Test",
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "pm.test('OTP requested successfully', () => {",
+                    "    pm.response.to.have.status(202);",
+                    "});"
+                  ]
+                }
+              }
+            ],
+            "request": {
+              "method": "POST",
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": {
+                "mode": "raw",
+                "raw": "{\"email\": \"{{success_email}}\"}"
+              },
+              "url": {
+                "raw": "{{base_url}}/api/v1/auth/otp/request/",
+                "host": ["{{base_url}}"],
+                "path": ["api", "v1", "auth", "otp", "request", ""]
+              }
+            }
+          },
+          {
+            "name": "OTP Verify - Success (Manual OTP)",
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "pm.test('Status is 200 OK', () => {",
+                    "    pm.response.to.have.status(200);",
+                    "});",
+                    "",
+                    "pm.test('Response has JWT tokens', () => {",
+                    "    const json = pm.response.json();",
+                    "    pm.expect(json.access).to.be.a('string');",
+                    "    pm.expect(json.refresh).to.be.a('string');",
+                    "    pm.expect(json.user).to.be.an('object');",
+                    "    pm.expect(json.user.email).to.eql(pm.environment.get('success_email'));",
+                    "    pm.environment.set('access_token', json.access);",
+                    "});"
+                  ]
+                }
+              }
+            ],
+            "request": {
+              "method": "POST",
+              "header": [{"key": "Content-Type", "value": "application/json"}],
+              "body": {
+                "mode": "raw",
+                "raw": "{\"email\": \"{{success_email}}\", \"otp\": \"{{manual_otp}}\"}"
+              },
+              "url": {
+                "raw": "{{base_url}}/api/v1/auth/otp/verify/",
+                "host": ["{{base_url}}"],
+                "path": ["api", "v1", "auth", "otp", "verify", ""]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "Audit Logs",
+        "item": [
+          {
+            "name": "Audit Logs - Authenticated Access",
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "pm.test('Status is 200 OK', () => {",
+                    "    pm.response.to.have.status(200);",
+                    "});",
+                    "",
+                    "pm.test('Response has pagination', () => {",
+                    "    const json = pm.response.json();",
+                    "    pm.expect(json.count).to.be.a('number');",
+                    "    pm.expect(json.results).to.be.an('array');",
+                    "});"
+                  ]
+                }
+              }
+            ],
+            "request": {
+              "method": "GET",
+              "header": [
+                {"key": "Authorization", "value": "Bearer {{access_token}}"}
+              ],
+              "url": {
+                "raw": "{{base_url}}/api/v1/audit/logs/",
+                "host": ["{{base_url}}"],
+                "path": ["api", "v1", "audit", "logs", ""]
+              }
+            }
+          },
+          {
+            "name": "Audit Logs - Filter by Email",
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "pm.test('Status is 200 OK', () => {",
+                    "    pm.response.to.have.status(200);",
+                    "});",
+                    "",
+                    "pm.test('Results filtered by email', () => {",
+                    "    const json = pm.response.json();",
+                    "    json.results.forEach(log => {",
+                    "        pm.expect(log.email).to.eql(pm.environment.get('test_email'));",
+                    "    });",
+                    "});"
+                  ]
+                }
+              }
+            ],
+            "request": {
+              "method": "GET",
+              "header": [
+                {"key": "Authorization", "value": "Bearer {{access_token}}"}
+              ],
+              "url": {
+                "raw": "{{base_url}}/api/v1/audit/logs/?email={{test_email}}",
+                "host": ["{{base_url}}"],
+                "path": ["api", "v1", "audit", "logs", ""],
+                "query": [{"key": "email", "value": "{{test_email}}"}]
+              }
+            }
+          },
+          {
+            "name": "Audit Logs - Filter by Event",
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "pm.test('Status is 200 OK', () => {",
+                    "    pm.response.to.have.status(200);",
+                    "});",
+                    "",
+                    "pm.test('Results filtered by event', () => {",
+                    "    const json = pm.response.json();",
+                    "    json.results.forEach(log => {",
+                    "        pm.expect(log.action).to.eql('OTP_REQUESTED');",
+                    "    });",
+                    "});"
+                  ]
+                }
+              }
+            ],
+            "request": {
+              "method": "GET",
+              "header": [
+                {"key": "Authorization", "value": "Bearer {{access_token}}"}
+              ],
+              "url": {
+                "raw": "{{base_url}}/api/v1/audit/logs/?event=OTP_REQUESTED",
+                "host": ["{{base_url}}"],
+                "path": ["api", "v1", "audit", "logs", ""],
+                "query": [{"key": "event", "value": "OTP_REQUESTED"}]
+              }
+            }
+          },
+          {
+            "name": "Audit Logs - Newest First Ordering",
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "pm.test('Status is 200 OK', () => {",
+                    "    pm.response.to.have.status(200);",
+                    "});",
+                    "",
+                    "pm.test('Results ordered newest first', () => {",
+                    "    const json = pm.response.json();",
+                    "    if (json.results.length > 1) {",
+                    "        const first = new Date(json.results[0].created_at);",
+                    "        const second = new Date(json.results[1].created_at);",
+                    "        pm.expect(first.getTime()).to.be.at.least(second.getTime());",
+                    "    }",
+                    "});"
+                  ]
+                }
+              }
+            ],
+            "request": {
+              "method": "GET",
+              "header": [
+                {"key": "Authorization", "value": "Bearer {{access_token}}"}
+              ],
+              "url": {
+                "raw": "{{base_url}}/api/v1/audit/logs/",
+                "host": ["{{base_url}}"],
+                "path": ["api", "v1", "audit", "logs", ""]
+              }
+            }
+          },
+          {
+            "name": "Audit Logs - Pagination",
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "exec": [
+                    "pm.test('Status is 200 OK', () => {",
+                    "    pm.response.to.have.status(200);",
+                    "});",
+                    "",
+                    "pm.test('Pagination works correctly', () => {",
+                    "    const json = pm.response.json();",
+                    "    pm.expect(json.results.length).to.be.at.most(5);",
+                    "});"
+                  ]
+                }
+              }
+            ],
+            "request": {
+              "method": "GET",
+              "header": [
+                {"key": "Authorization", "value": "Bearer {{access_token}}"}
+              ],
+              "url": {
+                "raw": "{{base_url}}/api/v1/audit/logs/?page_size=5",
+                "host": ["{{base_url}}"],
+                "path": ["api", "v1", "audit", "logs", ""],
+                "query": [{"key": "page_size", "value": "5"}]
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+  
